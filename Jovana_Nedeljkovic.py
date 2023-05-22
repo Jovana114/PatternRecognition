@@ -10,6 +10,7 @@ from sklearn.decomposition import PCA
 from sklearn.tree import DecisionTreeClassifier
 from sklearn import tree
 from scipy.stats import zscore
+from sklearn.model_selection import train_test_split
 
 # %% Baza podataka
 
@@ -71,6 +72,9 @@ print(outliers)
 X = X.drop(outliers.index)
 y = y.drop(outliers.index)
 
+print(X.shape)
+print(y.unique())
+
 # %% tačnosti i osetljivost 
 
 def tacnost_po_klasi(mat_konf, klase):
@@ -99,26 +103,29 @@ def osetljivost_po_klasi(mat_konf, klase):
     osetljivost_avg = np.mean(osetljivost_i)
     return osetljivost_avg
 
+# %% traint, test
+
+x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.05, random_state=42)
 
 # %% MLP klasifikator - optimal parameters
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X, y)
+indexes = kf.split(x_train, y_train)
 acc = []
 for hidden_lay in [(64,64,64), (128,64), (32,32,32,32)]:
     for act in ['logistic', 'tanh', 'relu']:
         for sol in ['adam', 'lbfgs', 'sgd']:
-            indexes = kf.split(X, y)
+            indexes = kf.split(x_train, y_train)
             acc_tmp = []
             fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
             for train_index, test_index in indexes:
                 classifier = MLPClassifier(hidden_layer_sizes=hidden_lay, activation=act,
                                           solver=sol, batch_size=50, learning_rate='constant', 
                                           max_iter=50,random_state=42, early_stopping=True)
-                classifier.fit(X.iloc[train_index,:], y.iloc[train_index])
-                y_pred = classifier.predict(X.iloc[test_index,:])
-                acc_tmp.append(accuracy_score(y.iloc[test_index], y_pred))
-                fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+                classifier.fit(x_train.iloc[train_index,:], y_train.iloc[train_index])
+                y_pred = classifier.predict(x_train.iloc[test_index,:])
+                acc_tmp.append(accuracy_score(y_train.iloc[test_index], y_pred))
+                fin_conf_mat += confusion_matrix(y_train.iloc[test_index], y_pred)
             print(f"For hidden layers {hidden_lay}, activation function {act}, and solver {sol}, the accuracy is: {np.mean(acc_tmp)} and confusion matrix is:\n{fin_conf_mat}")
             print(fin_conf_mat)
             acc.append(np.mean(acc_tmp))
@@ -127,17 +134,17 @@ print('najbolja tacnost je u iteraciji broj: ', np.argmax(acc))
 # %% MLP klasifikator
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X, y)
+indexes = kf.split(x_test, y_test)
 acc = []
 fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
 for train_index, test_index in indexes:
     classifier = MLPClassifier(hidden_layer_sizes=(128,64), activation='relu',
                               solver='adam', batch_size=50, learning_rate='constant', 
                               max_iter=50,random_state=42, early_stopping=True)
-    classifier.fit(X.iloc[train_index,:].values, y.iloc[train_index])
-    y_pred = classifier.predict(X.iloc[test_index,:].values)
-    print(accuracy_score(y.iloc[test_index], y_pred))
-    fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+    classifier.fit(x_test.iloc[train_index,:].values, y_test.iloc[train_index])
+    y_pred = classifier.predict(x_test.iloc[test_index,:].values)
+    print(accuracy_score(y_test.iloc[test_index], y_pred))
+    fin_conf_mat += confusion_matrix(y_test.iloc[test_index], y_pred)
 
 disp = ConfusionMatrixDisplay(confusion_matrix =fin_conf_mat,  display_labels=classifier.classes_)
 disp.plot(cmap="Blues", values_format='')  
@@ -152,19 +159,19 @@ print('prosecna osetljivost je: ', osetljivost_po_klasi(fin_conf_mat, y.unique()
 # %% DT klasifikator - optimal parameters
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X, y)
+indexes = kf.split(x_train, y_train)
 acc = []
 for md in [2, 5, 10, 50, 100]:
     for crt in ['gini', 'entropy']:
-        indexes = kf.split(X, y)
+        indexes = kf.split(x_train, y_train)
         acc_tmp = []
         fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
         for train_index, test_index in indexes:
             classifier = DecisionTreeClassifier(max_depth=md, criterion=crt)
-            classifier.fit(X.iloc[train_index,:], y.iloc[train_index])
-            y_pred = classifier.predict(X.iloc[test_index,:])
-            acc_tmp.append(accuracy_score(y.iloc[test_index], y_pred))
-            fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+            classifier.fit(x_train.iloc[train_index,:], y_train.iloc[train_index])
+            y_pred = classifier.predict(x_train.iloc[test_index,:])
+            acc_tmp.append(accuracy_score(y_train.iloc[test_index], y_pred))
+            fin_conf_mat += confusion_matrix(y_train.iloc[test_index], y_pred)
         print('za parametre max_depth=', md, ', criterion=', crt, ' tacnost je: ', np.mean(acc_tmp),
               ' a mat. konf. je:')
         print(fin_conf_mat)
@@ -174,17 +181,17 @@ print('najbolja tacnost je u iteraciji broj: ', np.argmax(acc))
 # %% DT klasifikator - on data
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X, y)
+indexes = kf.split(x_test, y_test)
 acc = []
 fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
 for train_index, test_index in indexes:
     classifier = DecisionTreeClassifier(max_depth=50, criterion='entropy')
-    classifier.fit(X.iloc[train_index,:].values, y.iloc[train_index])
+    classifier.fit(x_test.iloc[train_index,:].values, y_test.iloc[train_index])
     plt.figure(figsize=(16,9), dpi=300)
     tree.plot_tree(classifier)
-    y_pred = classifier.predict(X.iloc[test_index,:].values)
-    print(accuracy_score(y.iloc[test_index], y_pred))
-    fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+    y_pred = classifier.predict(x_test.iloc[test_index,:].values)
+    print(accuracy_score(y_test.iloc[test_index], y_pred))
+    fin_conf_mat += confusion_matrix(y_test.iloc[test_index], y_pred)
 
 disp = ConfusionMatrixDisplay(confusion_matrix =fin_conf_mat,  display_labels=classifier.classes_)
 disp.plot(cmap="Blues", values_format='') 
@@ -203,12 +210,12 @@ for num in [100, 200, 500, 1000]:
     for solv in ['newton-cg', 'lbfgs', 'sag', 'saga']:
         acc_tmp = []
         fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
-        for train_index, test_index in kf.split(X, y):
+        for train_index, test_index in kf.split(x_train, y_train):
             classifier = LogisticRegression(multi_class='multinomial', max_iter=num, solver=solv)
-            classifier.fit(X.iloc[train_index,:], y.iloc[train_index])
-            y_pred = classifier.predict(X.iloc[test_index,:])
-            acc_tmp.append(accuracy_score(y.iloc[test_index], y_pred))
-            fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+            classifier.fit(x_train.iloc[train_index,:], y_train.iloc[train_index])
+            y_pred = classifier.predict(x_train.iloc[test_index,:])
+            acc_tmp.append(accuracy_score(y_train.iloc[test_index], y_pred))
+            fin_conf_mat += confusion_matrix(y_train.iloc[test_index], y_pred)
         print('za parametre max_iter=', num, ' i solver=', solv, ' tacnost je: ', np.mean(acc_tmp),
                   ' a mat. konf. je:')
         print(fin_conf_mat)
@@ -218,16 +225,16 @@ print('najbolja tacnost je u iteraciji broj: ', np.argmax(acc))
 # %% Logistic Regression on data
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X, y)
+indexes = kf.split(x_test, y_test)
 acc = []
 fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
 for train_index, test_index in indexes:
     classifier = LogisticRegression(max_iter=1000, multi_class='multinomial', 
                                     solver='newton-cg')
-    classifier.fit(X.iloc[train_index,:].values, y.iloc[train_index])
-    y_pred = classifier.predict(X.iloc[test_index,:].values)
-    print(accuracy_score(y.iloc[test_index], y_pred))
-    fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+    classifier.fit(x_test.iloc[train_index,:].values, y_test.iloc[train_index])
+    y_pred = classifier.predict(x_test.iloc[test_index,:].values)
+    print(accuracy_score(y_test.iloc[test_index], y_pred))
+    fin_conf_mat += confusion_matrix(y_test.iloc[test_index], y_pred)
 
 disp = ConfusionMatrixDisplay(confusion_matrix =fin_conf_mat,  display_labels=classifier.classes_)
 disp.plot(cmap="Blues", values_format='')  
@@ -264,20 +271,24 @@ plt.legend()
 plt.title('PCA on dataset')
 plt.figure(figsize=(16,9))
 
+# %%
+
+x_train, x_test, y_train, y_test = train_test_split(X_pca, y, test_size=0.05, random_state=42)
+
 # %% MLP klasifikator on data - PCA
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X_pca, y)
+indexes = kf.split(x_test, y_test)
 acc = []
 fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
 for train_index, test_index in indexes:
     classifier = MLPClassifier(hidden_layer_sizes=(128,64), activation='relu',
                               solver='adam', batch_size=50, learning_rate='constant', 
                               max_iter=50,random_state=42, early_stopping=True)
-    classifier.fit(X_pca[train_index,:], y.iloc[train_index])
-    y_pred = classifier.predict(X_pca[test_index,:])
-    print(accuracy_score(y.iloc[test_index], y_pred))
-    fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+    classifier.fit(x_test[train_index,:], y_test.iloc[train_index])
+    y_pred = classifier.predict(x_test[test_index,:])
+    print(accuracy_score(y_test.iloc[test_index], y_pred))
+    fin_conf_mat += confusion_matrix(y_test.iloc[test_index], y_pred)
 
 disp = ConfusionMatrixDisplay(confusion_matrix =fin_conf_mat,  display_labels=classifier.classes_)
 disp.plot(cmap="Blues", values_format='')  
@@ -291,15 +302,15 @@ print('prosecna osetljivost je - PCA: ', osetljivost_po_klasi(fin_conf_mat, y.un
 # %% DT on data - PCA
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X_pca, y)
+indexes = kf.split(x_test, y_test)
 acc = []
 fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
 for train_index, test_index in indexes:
     classifier = DecisionTreeClassifier(max_depth=50, criterion='entropy')
-    classifier.fit(X_pca[train_index,:], y.iloc[train_index])
-    y_pred = classifier.predict(X_pca[test_index,:])
-    print(accuracy_score(y.iloc[test_index], y_pred))
-    fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+    classifier.fit(x_test[train_index,:], y_test.iloc[train_index])
+    y_pred = classifier.predict(x_test[test_index,:])
+    print(accuracy_score(y_test.iloc[test_index], y_pred))
+    fin_conf_mat += confusion_matrix(y_test.iloc[test_index], y_pred)
 
 disp = ConfusionMatrixDisplay(confusion_matrix =fin_conf_mat,  display_labels=classifier.classes_)
 disp.plot(cmap="Blues", values_format='')  
@@ -314,15 +325,15 @@ print('Prosečna osetljivost: ', osetljivost_po_klasi(fin_conf_mat, y.unique()))
 # %% Logistic Regression on data - PCA
 
 kf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
-indexes = kf.split(X_pca, y)
+indexes = kf.split(x_test, y_test)
 acc = []
 fin_conf_mat = np.zeros((len(np.unique(y)),len(np.unique(y))))
 for train_index, test_index in indexes:
     classifier = LogisticRegression(max_iter=1000, multi_class='multinomial', solver='newton-cg')
-    classifier.fit(X_pca[train_index,:], y.iloc[train_index])
-    y_pred = classifier.predict(X_pca[test_index,:])
-    print(accuracy_score(y.iloc[test_index], y_pred))
-    fin_conf_mat += confusion_matrix(y.iloc[test_index], y_pred)
+    classifier.fit(x_test[train_index,:], y_test.iloc[train_index])
+    y_pred = classifier.predict(x_test[test_index,:])
+    print(accuracy_score(y_test.iloc[test_index], y_pred))
+    fin_conf_mat += confusion_matrix(y_test.iloc[test_index], y_pred)
 
 disp = ConfusionMatrixDisplay(confusion_matrix =fin_conf_mat,  display_labels=classifier.classes_)
 disp.plot(cmap="Blues", values_format='')  
